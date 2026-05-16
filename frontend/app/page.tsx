@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Inter } from "next/font/google";
+import { BuildingCardGrid } from "@/components/building-card-grid";
+import { BuildingSearch } from "@/components/building-search";
 import { fetchBuildings, type BuildingListItem } from "@/lib/buildings";
 
 const inter = Inter({
@@ -71,48 +73,43 @@ function BrandLogo() {
   );
 }
 
-function BuildingCardImage({
-  src,
-  alt,
-}: {
-  src: string | null;
-  alt: string;
-}) {
-  if (!src) {
-    return <div className="h-full w-full bg-gray-200" aria-hidden />;
-  }
+function HomeContent() {
+  const searchParams = useSearchParams();
+  const searchQuery = searchParams.get("q")?.trim() ?? "";
 
-  return (
-    <Image
-      src={src}
-      alt={alt}
-      fill
-      className="object-cover"
-      sizes="(max-width: 640px) 100vw, 50vw"
-      unoptimized
-    />
-  );
-}
-
-export default function Home() {
   const [buildings, setBuildings] = useState<BuildingListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    document.title = "Property Management Company - Rental Buildings";
+    document.title = searchQuery
+      ? `Search: ${searchQuery} - Rental Buildings`
+      : "Property Management Company - Rental Buildings";
+  }, [searchQuery]);
 
+  useEffect(() => {
     let cancelled = false;
 
-    async function loadBuildings() {
+    void Promise.resolve().then(() => {
+      if (!cancelled) {
+        setLoading(true);
+        setError(null);
+      }
+    });
+
+    void (async () => {
       try {
-        const data = await fetchBuildings();
+        const data = await fetchBuildings(
+          searchQuery ? { q: searchQuery } : undefined,
+        );
+
         if (!cancelled) {
           setBuildings(data);
           setError(null);
         }
       } catch (loadError) {
         if (!cancelled) {
+          setBuildings([]);
           setError(
             loadError instanceof Error
               ? loadError.message
@@ -124,15 +121,44 @@ export default function Home() {
           setLoading(false);
         }
       }
-    }
-
-    loadBuildings();
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [searchQuery]);
 
+  return (
+    <>
+      <main className="mx-auto max-w-7xl px-6 py-12">
+        <div className="mb-12 border-t border-gray-300 pt-6">
+          <h1 className="text-2xl font-medium tracking-wide text-gray-700">
+            {searchQuery ? `Search results for “${searchQuery}”` : "Rental Buildings"}
+          </h1>
+          <BuildingSearch
+            className="mt-6"
+            inputId="home-building-search"
+            defaultQuery={searchQuery}
+            key={searchQuery}
+          />
+        </div>
+
+        <BuildingCardGrid
+          buildings={buildings}
+          loading={loading}
+          error={error}
+          emptyMessage={
+            searchQuery
+              ? `No buildings found matching “${searchQuery}”.`
+              : "No rental buildings available."
+          }
+        />
+      </main>
+    </>
+  );
+}
+
+export default function Home() {
   return (
     <div className={`${inter.className} bg-white text-[#333]`}>
       <header className="relative border-b border-gray-100 px-6 py-4">
@@ -191,58 +217,15 @@ export default function Home() {
         </button>
       </section>
 
-      <main className="mx-auto max-w-7xl px-6 py-12">
-        <div className="mb-12 border-t border-gray-300 pt-6">
-          <h1 className="text-2xl font-medium tracking-wide text-gray-700">
-            Rental Buildings
-          </h1>
-        </div>
-
-        {loading ? (
-          <p className="text-sm text-gray-500">Loading buildings...</p>
-        ) : null}
-
-        {error ? (
-          <p className="text-sm text-red-600">{error}</p>
-        ) : null}
-
-        {!loading && !error && buildings.length === 0 ? (
-          <p className="text-sm text-gray-500">No rental buildings available.</p>
-        ) : null}
-
-        {!loading && !error && buildings.length > 0 ? (
-          <div className="grid grid-cols-1 gap-x-12 gap-y-12 md:grid-cols-2">
-            {buildings.map((property) => (
-              <article
-                key={property.id}
-                className="flex flex-col border border-gray-300 sm:flex-row"
-              >
-                <div className="relative aspect-4/3 sm:aspect-auto sm:w-1/2 sm:min-h-[240px]">
-                  <BuildingCardImage src={property.image} alt={property.name} />
-                </div>
-                <div className="flex w-full flex-col justify-between p-6 sm:w-1/2">
-                  <div>
-                    <h2 className="text-3xl font-medium leading-tight text-gray-800">
-                      {property.name}
-                    </h2>
-                    <p className="mt-2 text-sm uppercase tracking-widest text-gray-500">
-                      {property.location}
-                    </p>
-                  </div>
-                  <div className="mt-6">
-                    <Link
-                      href={`/buildings/${property.id}`}
-                      className="inline-block cursor-pointer bg-[#4a4a4a] px-4 py-2 text-xs font-medium uppercase tracking-tighter text-white transition-colors hover:bg-black"
-                    >
-                      See Apartments
-                    </Link>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : null}
-      </main>
+      <Suspense
+        fallback={
+          <main className="mx-auto max-w-7xl px-6 py-12">
+            <p className="text-sm text-gray-500">Loading buildings...</p>
+          </main>
+        }
+      >
+        <HomeContent />
+      </Suspense>
 
       <footer className="mb-12 mt-24 border-t border-gray-300 pt-12 text-center">
         <div className="mx-auto max-w-7xl px-6">

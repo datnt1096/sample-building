@@ -163,7 +163,7 @@ function BuildingDetailView({ building }: { building: BuildingDetail }) {
 
           <div className="w-1/3 text-right">
             <h1 className="text-xl font-medium text-gray-800">{building.name}</h1>
-            <p className="text-sm text-gray-500">{building.zip}</p>
+            <p className="text-sm text-gray-500">{building.address} {building.zip}</p>
             <p className="text-sm text-gray-500">{building.buildingType}</p>
           </div>
         </div>
