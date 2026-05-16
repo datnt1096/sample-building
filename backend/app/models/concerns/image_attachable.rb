@@ -5,14 +5,19 @@ module ImageAttachable
   MAX_IMAGE_SIZE = 10.megabytes
 
   included do
-    validate :image_must_be_attached
-    validate :image_must_be_acceptable, if: -> { send(image_attachment_name).attached? }
+    validate :image_must_be_attached, on: :create
+    validate :image_must_be_acceptable, if: :validate_image_content?
   end
 
   private
 
   def image_attachment_name
     :image
+  end
+
+  def validate_image_content?
+    attachment = send(image_attachment_name)
+    attachment.attached? && (new_record? || attachment.changed?)
   end
 
   def image_must_be_attached

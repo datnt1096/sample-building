@@ -78,15 +78,7 @@ module Api
       def attachment_url(attachment)
         return nil unless attachment.attached?
 
-        rails_blob_url(attachment, **url_options)
-      end
-
-      def url_options
-        {
-          host: request.host,
-          protocol: request.protocol,
-          port: request.optional_port
-        }
+        rails_blob_url(attachment)
       end
     end
   end

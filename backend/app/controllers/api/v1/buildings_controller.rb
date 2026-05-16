@@ -1,10 +1,17 @@
 module Api
   module V1
     class BuildingsController < BaseController
+      MAX_LIMIT = 100
+
       before_action :set_building, only: :show
 
       def index
         buildings = Building.ordered_by_name.with_attached_image
+
+        if search_query.present?
+          buildings = buildings.search_by_name(search_query)
+          buildings = buildings.limit(parsed_limit) if limit_param_present?
+        end
 
         render json: {
           buildings: buildings.map { |building| serialize_building_list_item(building) }
@@ -17,29 +24,6 @@ module Api
         }
       end
 
-      def search
-        query = params[:q].to_s.strip
-
-        if query.blank?
-          return render json: { buildings: [] }
-        end
-
-        buildings = Building.search_by_name(query).ordered_by_name
-        buildings = buildings.with_attached_image unless autocomplete?
-
-        if autocomplete?
-          buildings = buildings.limit(autocomplete_limit)
-          render json: {
-            buildings: buildings.map { |building| serialize_autocomplete_item(building) }
-          }
-        else
-          buildings = buildings.limit(search_limit)
-          render json: {
-            buildings: buildings.map { |building| serialize_building_list_item(building) }
-          }
-        end
-      end
-
       private
 
       def set_building
@@ -50,16 +34,16 @@ module Api
           .find(params[:id])
       end
 
-      def autocomplete?
-        ActiveModel::Type::Boolean.new.cast(params[:autocomplete])
+      def search_query
+        params[:q].to_s.strip
       end
 
-      def autocomplete_limit
-        params.fetch(:limit, 10).to_i.clamp(1, 50)
+      def limit_param_present?
+        params.key?(:limit) && params[:limit].present?
       end
 
-      def search_limit
-        params.fetch(:limit, 50).to_i.clamp(1, 100)
+      def parsed_limit
+        params[:limit].to_i.clamp(1, MAX_LIMIT)
       end
     end
   end

@@ -1,12 +1,12 @@
-import type { ReactNode } from "react";
-import type { Metadata } from "next";
+"use client";
+
+import { useEffect, useState, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { useParams } from "next/navigation";
 import { Inter } from "next/font/google";
 import {
-  getBuildingIds,
-  getBuildingPageData,
+  fetchBuilding,
   parseBuildingId,
   type Apartment,
   type BuildingDetail,
@@ -17,29 +17,6 @@ const inter = Inter({
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700"],
 });
-
-type PageProps = {
-  params: Promise<{ id: string }>;
-};
-
-export function generateStaticParams() {
-  return getBuildingIds().map((id) => ({ id: String(id) }));
-}
-
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const { id: idParam } = await params;
-  const id = parseBuildingId(idParam);
-  const building = id !== undefined ? getBuildingPageData(id) : undefined;
-
-  if (!building) {
-    return { title: "Building Not Found" };
-  }
-
-  return {
-    title: `${building.name} - Building Details`,
-    description: building.description,
-  };
-}
 
 function BuildingLogo() {
   return (
@@ -81,17 +58,28 @@ function PolicyBlock({
   );
 }
 
+function ApartmentImage({ apartment }: { apartment: Apartment }) {
+  if (!apartment.image) {
+    return <div className="h-full w-full bg-gray-200" aria-hidden />;
+  }
+
+  return (
+    <Image
+      src={apartment.image}
+      alt={`Unit ${apartment.unit} Interior`}
+      fill
+      className="object-cover"
+      sizes="40vw"
+      unoptimized
+    />
+  );
+}
+
 function ApartmentCard({ apartment }: { apartment: Apartment }) {
   return (
     <article className="flex overflow-hidden border border-gray-200">
-      <div className="relative w-2/5 shrink-0 min-h-[140px]">
-        <Image
-          src={apartment.image}
-          alt={`Unit ${apartment.unit} Interior`}
-          fill
-          className="object-cover"
-          sizes="40vw"
-        />
+      <div className="relative min-h-[140px] w-2/5 shrink-0">
+        <ApartmentImage apartment={apartment} />
       </div>
       <div className="flex w-3/5 flex-col justify-between p-4">
         <div>
@@ -134,7 +122,21 @@ function PolicyGrid({ policies }: { policies: PolicyItem[] }) {
   );
 }
 
-function BuildingDetailPage({ building }: { building: BuildingDetail }) {
+function BuildingNotFoundView() {
+  return (
+    <div
+      className={`${inter.className} flex min-h-[50vh] flex-col items-center justify-center gap-4 bg-white px-4 text-[#333]`}
+    >
+      <h1 className="text-2xl font-medium text-gray-800">Building not found</h1>
+      <Link href="/" className="text-sm text-gray-600 underline hover:text-gray-800">
+        Back to rental buildings
+      </Link>
+    </div>
+  );
+}
+
+function BuildingDetailView({ building }: { building: BuildingDetail }) {
+  const heroImage = building.image;
   const hasApartments = building.apartments.length > 0;
   const hasPolicies =
     building.generalPolicies.length > 0 || building.additionalInfo.length > 0;
@@ -169,23 +171,30 @@ function BuildingDetailPage({ building }: { building: BuildingDetail }) {
 
       <main>
         <section className="relative w-full">
-          <Image
-            src={building.heroImage}
-            alt={`${building.name} Exterior`}
-            width={1920}
-            height={600}
-            className="h-auto max-h-[600px] w-full object-cover"
-            priority
-            sizes="100vw"
-          />
+          {heroImage ? (
+            <Image
+              src={heroImage}
+              alt={`${building.name} Exterior`}
+              width={1920}
+              height={600}
+              className="h-auto max-h-[600px] w-full object-cover"
+              priority
+              sizes="100vw"
+              unoptimized
+            />
+          ) : (
+            <div className="h-[400px] w-full bg-gray-200" aria-hidden />
+          )}
         </section>
 
         <div className="mx-auto max-w-7xl px-4 py-8">
-          <section className="mb-12">
-            <p className="text-sm leading-relaxed text-gray-600">
-              {building.description}
-            </p>
-          </section>
+          {building.description ? (
+            <section className="mb-12">
+              <p className="text-sm leading-relaxed text-gray-600">
+                {building.description}
+              </p>
+            </section>
+          ) : null}
 
           {hasApartments ? (
             <section className="mb-16">
@@ -251,19 +260,87 @@ function BuildingDetailPage({ building }: { building: BuildingDetail }) {
   );
 }
 
-export default async function BuildingPage({ params }: PageProps) {
-  const { id: idParam } = await params;
-  const id = parseBuildingId(idParam);
+export default function BuildingPage() {
+  const params = useParams();
+  const idParam = typeof params.id === "string" ? params.id : "";
+  const buildingId = parseBuildingId(idParam);
 
-  if (id === undefined) {
-    notFound();
+  if (buildingId === undefined) {
+    return <BuildingNotFoundView />;
   }
 
-  const building = getBuildingPageData(id);
+  return <BuildingPageContent key={buildingId} buildingId={buildingId} />;
+}
+
+function BuildingPageContent({ buildingId }: { buildingId: number }) {
+  const [building, setBuilding] = useState<BuildingDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const data = await fetchBuilding(buildingId);
+
+        if (cancelled) {
+          return;
+        }
+
+        if (!data) {
+          setBuilding(null);
+          setError(null);
+          return;
+        }
+
+        setBuilding(data);
+        document.title = `${data.name} - Building Details`;
+      } catch (loadError) {
+        if (!cancelled) {
+          setBuilding(null);
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Failed to load building",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [buildingId]);
+
+  if (loading) {
+    return (
+      <div className={`${inter.className} bg-white px-4 py-12 text-[#333]`}>
+        <p className="text-sm text-gray-500">Loading building...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className={`${inter.className} bg-white px-4 py-12 text-[#333]`}>
+        <p className="text-sm text-red-600">{error}</p>
+        <p className="mt-4 text-sm">
+          <Link href="/" className="underline hover:text-gray-800">
+            ← Back to all rental buildings
+          </Link>
+        </p>
+      </div>
+    );
+  }
 
   if (!building) {
-    notFound();
+    return <BuildingNotFoundView />;
   }
 
-  return <BuildingDetailPage building={building} />;
+  return <BuildingDetailView building={building} />;
 }
