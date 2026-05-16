@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_16_091157) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_16_091417) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -42,6 +42,40 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_16_091157) do
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
   end
 
+  create_table "apartments", force: :cascade do |t|
+    t.bigint "building_id", null: false
+    t.datetime "created_at", null: false
+    t.string "layout", null: false
+    t.decimal "price", precision: 10, scale: 2, null: false
+    t.string "unit", null: false
+    t.datetime "updated_at", null: false
+    t.index ["building_id", "unit"], name: "index_apartments_on_building_id_and_unit", unique: true
+    t.index ["building_id"], name: "index_apartments_on_building_id"
+  end
+
+  create_table "building_policies", force: :cascade do |t|
+    t.bigint "building_id", null: false
+    t.datetime "created_at", null: false
+    t.text "note"
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["building_id"], name: "index_building_policies_on_building_id"
+  end
+
+  create_table "buildings", force: :cascade do |t|
+    t.text "additional_info", default: [], null: false, array: true
+    t.string "address"
+    t.string "building_type", null: false
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.string "location", null: false
+    t.string "name", null: false
+    t.datetime "updated_at", null: false
+    t.string "zip"
+  end
+
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "apartments", "buildings"
+  add_foreign_key "building_policies", "buildings"
 end
